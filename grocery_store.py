@@ -4,7 +4,6 @@ Created By : Anurag Gupta
 Created On : 12 May 2018
 Description: A simple script to manage the store's transactions
 '''
-import pprint
 from datetime import datetime
 
 class Inventory:
@@ -79,11 +78,6 @@ class Inventory:
                 if item_found is False:
                     self.__items_sold.append(items)
 
-class Registers:
-    '''
-    '''
-    pass
-    
 class Store:
     '''
     '''
@@ -112,6 +106,7 @@ class GroceryStore(Store):
     __total_sale_amount = 0
     __cart = None
     __transactions = None
+    toggle_register = False
 
     def __init__(self, items_list):
         super().__init__()
@@ -155,8 +150,9 @@ class GroceryStore(Store):
                             'id': items_in_inventory[item_index]['id'],
                             'item': item[0],
                             'quantity': item[1],
+                            "discount": str(item[2]) + '%',
                             'price': items_in_inventory[item_index]['price'],
-                            'amount': items_in_inventory[item_index]['price'] * item[1]
+                            'amount': items_in_inventory[item_index]['price'] * item[1] - ( items_in_inventory[item_index]['price'] * item[1] ) * ( item[2] / 100 )
                         }
                         self.__cart.append(cart_obj)
                         del cart_obj
@@ -193,20 +189,35 @@ class GroceryStore(Store):
         # validate that customer has enough amount to purchase
         # the items
         if customer.validate_balance(total_amount_to_be_paid) is True:
-            # start transaction
-            self.__transactions.do_transacton(customer, total_amount_to_be_paid, datetime.now().isoformat(sep=' ', timespec='seconds'))
-            # update sale amount
-            self.sale_amount += total_amount_to_be_paid
-            # update store's balance
-            self.balance += total_amount_to_be_paid
-            # update inventories
-            self._Store__inventory.update_items_sold_list(self.__cart)
-            self._Store__inventory.update_inventory(self.__cart)
-            # generate biil
-            self.generate_bill()
-            return customer.balance - total_amount_to_be_paid
+            if self.toggle_register is True:
+                # start transaction
+                self._Store__register_1.perform_transaction(self.__transactions, customer, total_amount_to_be_paid, datetime.now().isoformat(sep=' ', timespec='seconds'))
+                self.toggle_register = False
+                return self.registers(customer, total_amount_to_be_paid)
+            else:
+                # start transaction
+                self._Store__register_2.perform_transaction(self.__transactions, customer, total_amount_to_be_paid, datetime.now().isoformat(sep=' ', timespec='seconds'))
+                self.toggle_register = True
+                return self.registers(customer, total_amount_to_be_paid)
         else:
             print("Error: Customer does not enough money to make the purchase.")
+    
+    def registers(self, customer, total_amount_to_be_paid):
+        '''
+        Updates inventory & calculates the amount to be paid
+        by customer
+        '''
+        # update sale amount
+        self.sale_amount += total_amount_to_be_paid
+        # update store's balance
+        self.balance += total_amount_to_be_paid
+        # update inventories
+        self._Store__inventory.update_items_sold_list(self.__cart)
+        self._Store__inventory.update_inventory(self.__cart)
+        # generate biil
+        self.generate_bill()
+        
+        return customer.balance - total_amount_to_be_paid
 
     def generate_bill(self):
         '''
@@ -219,7 +230,7 @@ class GroceryStore(Store):
         total_amount = 0
         for index in range(len(self.__cart)):
             total_amount += self.__cart[index]['amount']
-            print("| {0:^10} | {1:^10} | {2:^10} | {3:^10} | {4:^10} | {5:^12} |".format(index+1, self.__cart[index]['item'], self.__cart[index]['quantity'], self.__cart[index]['price'], '-', self.__cart[index]['amount']))
+            print("| {0:^10} | {1:^10} | {2:^10} | {3:^10} | {4:^10} | {5:^12} |".format(index+1, self.__cart[index]['item'], self.__cart[index]['quantity'], self.__cart[index]['price'], self.__cart[index]['discount'], self.__cart[index]['amount']))
             print("{plus}{hyphens}{plus}".format(plus = '+', hyphens = '-'*79))
         print("| {0:>62} = {1:^12} |".format("Total Amount", total_amount))
         print("{plus}{hyphens}{plus}".format(plus = '+', hyphens = '-'*79))
@@ -242,7 +253,6 @@ class GroceryStore(Store):
         Retreives transaction history
         '''
         return self.__transactions.display_transaction_history()
-
 
 class Transactions:
     '''
@@ -278,6 +288,15 @@ class Transactions:
         for index in range(len(self.__transaction_history)):
             print("| {0:^10} | {1:^20} | {2:^20} | {3:^20} |".format(index+1, self.__transaction_history[index]['customer'], self.__transaction_history[index]['amount'], self.__transaction_history[index]['datetime']))
             print("{plus}{hyphens}{plus}".format(plus = '+', hyphens = '-'*81))
+
+class Registers():
+    '''
+    '''
+    def __init__(self):
+        pass
+
+    def perform_transaction(self, transaction_handle, customer, amount_to_be_paid, date_time):
+        transaction_handle.do_transacton(customer, amount_to_be_paid, date_time)
 
 class Customers:
     '''
@@ -353,9 +372,11 @@ if __name__ == '__main__':
 
     # Lets make customer go to grocery store &
     # purchase few items
+    # Note: the third element in each of the sublist represents discount
+    #       on that item.
     shopping_list = [
-        ["Apples", 5],
-        ["Oranges", 7]
+        ["Apples", 5, 0],
+        ["Oranges", 7, 0]
     ]
 
     # lets add items to cart
@@ -372,9 +393,9 @@ if __name__ == '__main__':
     # Lets make customer go to grocery store &
     # purchase few items
     shopping_list = [
-        ["Mangoes", 10],
-        ["Oranges", 9],
-        ["Apples", 10]
+        ["Mangoes", 10, 0],
+        ["Oranges", 9, 0],
+        ["Apples", 10, 0]
     ]
 
     # lets add items to cart
@@ -382,6 +403,25 @@ if __name__ == '__main__':
 
     # lets checkout
     grocery_store.checkout(milap)
+
+    #########################################################
+
+    # Create a customer
+    anurag = Customers('anurag')
+
+    # Lets make customer go to grocery store &
+    # purchase few items, lets say customer purchase few discounted items
+    shopping_list = [
+        ["Mangoes", 10, 15],
+        ["Oranges", 9, 20],
+        ["Apples", 10, 10]
+    ]
+
+    # lets add items to cart
+    grocery_store.add_to_cart(anurag.selected_items_to_purchase(shopping_list))
+
+    # lets checkout
+    grocery_store.checkout(anurag)
 
     #########################################################
 
